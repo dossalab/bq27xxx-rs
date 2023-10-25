@@ -1,10 +1,6 @@
 //! This module is tested on BQ27427, but I suspect that the interface
 //! and commands are pretty similar across all TI bridges. YMMV
 
-pub mod i2c_address {
-    pub const BQ27427: u8 = 0x55;
-}
-
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ChipType {
     BQ27421,
