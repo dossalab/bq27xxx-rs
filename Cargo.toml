@@ -1,6 +1,6 @@
 [package]
 name = "bq27xxx"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Roman Liutko <dossalab@pm.me>"]
 edition = "2021"
 description = "BQ27xxx (bq27426, bq27427) platform-agnostic driver"
@@ -11,7 +11,7 @@ readme = "README.md"
 repository = "https://github.com/dossalab/bq27xxx-rs"
 
 [dependencies]
-embedded-hal-async = "1.0.0-alpha.9"
+embedded-hal-async = "1.0.0-rc.3"
 bitflags = "1.3.2"
 defmt = { version = "0.3", optional = true }
 byteorder = { version = "1.5.0", default-features = false }

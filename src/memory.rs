@@ -60,7 +60,7 @@ impl MemoryBlock {
 
 impl<I, D, E> Bq27xx<I, D>
 where
-    D: delay::DelayUs,
+    D: delay::DelayNs,
     I: i2c::I2c<Error = E>,
 {
     /// Read the selected block checksum from the gauge

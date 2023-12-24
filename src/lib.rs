@@ -45,7 +45,7 @@ pub struct Bq27xx<I, D> {
 
 impl<I, D, E> Bq27xx<I, D>
 where
-    D: delay::DelayUs,
+    D: delay::DelayNs,
     I: i2c::I2c<Error = E>,
 {
     // Reads the data from either simple or control command.
