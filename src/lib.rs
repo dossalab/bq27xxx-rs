@@ -5,7 +5,7 @@
 pub mod known_chips;
 pub mod memory;
 
-pub(crate) mod defs;
+pub mod defs;
 
 use defs::*;
 use embedded_hal_async::{delay, i2c};
@@ -29,6 +29,7 @@ impl<E> From<E> for ChipError<E> {
 
 /// Battery chemistry type. B4200 should be suited for the most hobby-grade cells
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(PartialEq)]
 pub enum ChemId {
     A4350,
     B4200,
@@ -49,10 +50,7 @@ where
     I: i2c::I2c<Error = E>,
 {
     // Reads the data from either simple or control command.
-    async fn read<R>(&mut self, envelope: Command) -> Result<R, ChipError<E>>
-    where
-        R: TryFrom<u16>,
-    {
+    async fn read(&mut self, envelope: Command) -> Result<u16, ChipError<E>> {
         let mut response = [0, 0];
 
         match envelope {
@@ -71,9 +69,7 @@ where
             }
         }
 
-        u16::from_le_bytes(response)
-            .try_into()
-            .map_err(|_| ChipError::Value)
+        Ok(u16::from_le_bytes(response))
     }
 
     // Executes the command. Typically not used for simple commands
@@ -93,7 +89,11 @@ where
 
     /// Reads the contents of the Flags register
     pub async fn get_flags(&mut self) -> Result<StatusFlags, ChipError<E>> {
-        self.read(commands::FLAGS).await
+        self.read(commands::FLAGS).await.map(|x| x.into())
+    }
+
+    pub async fn get_control_status(&mut self) -> Result<ControlStatusFlags, ChipError<E>> {
+        self.read(commands::CONTROL_STATUS).await.map(|x| x.into())
     }
 
     /// Waits for any of the given flags (provided as bitmask)
@@ -168,7 +168,7 @@ where
 
     /// Reads the average current
     pub async fn average_current(&mut self) -> Result<i16, ChipError<E>> {
-        self.read(commands::AVERAGE_CURRENT).await
+        self.read(commands::AVERAGE_CURRENT).await.map(|x| x as i16)
     }
 
     /// Reads the temperature sensor, either internal or external, depending on the configuration
@@ -183,7 +183,25 @@ where
 
     /// Reads the device type
     pub async fn device_type(&mut self) -> Result<ChipType, ChipError<E>> {
-        self.read(commands::DEVICE_TYPE).await
+        self.read(commands::DEVICE_TYPE).await.map(|x| match x {
+            0x421 => ChipType::BQ27421,
+            0x426 => ChipType::BQ27426,
+            0x427 => ChipType::BQ27427,
+            _ => ChipType::Unknown,
+        })
+    }
+
+    // Prepares the chip for the further communication. Fixes some known errata for BQ27427
+    pub async fn probe(&mut self) -> Result<ChipType, ChipError<E>> {
+        let device = self.device_type().await?;
+
+        match device {
+            ChipType::BQ27427 => {
+                self.check_fix_bq27427_errata().await?;
+                Ok(device)
+            }
+            _ => Ok(device),
+        }
     }
 
     /// Creates the driver instance

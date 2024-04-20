@@ -90,8 +90,34 @@ bitflags! {
     }
 }
 
+bitflags! {
+    /// Flags returned by the "ControlStatus" command
+    pub struct ControlStatusFlags: u16 {
+        const SHUTDOWNEN = 1 << 15;
+        const WDRESET = 1 << 14;
+        const SS = 1 << 13;
+        const CALMODE = 1 << 12;
+        const CCA = 1 << 11;
+        const BCA = 1 << 10;
+        const QMAX_UP = 1 << 9;
+        const RES_UP = 1 << 8;
+        const INITCOMP = 1 << 7;
+        const SLEEP = 1 << 4;
+        const LDMD = 1 << 3;
+        const RUP_DIS = 1 << 2;
+        const VOK = 1 << 1;
+        const CHEM_CHANGE = 1 << 0;
+    }
+}
+
 impl From<u16> for StatusFlags {
     fn from(value: u16) -> Self {
-        StatusFlags::from_bits_truncate(value)
+        Self::from_bits_truncate(value)
+    }
+}
+
+impl From<u16> for ControlStatusFlags {
+    fn from(value: u16) -> Self {
+        Self::from_bits_truncate(value)
     }
 }

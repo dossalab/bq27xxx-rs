@@ -64,7 +64,7 @@ where
     I: i2c::I2c<Error = E>,
 {
     /// Read the selected block checksum from the gauge
-    async fn read_checksum(&mut self) -> Result<u8, ChipError<E>> {
+    pub(crate) async fn read_checksum(&mut self) -> Result<u8, ChipError<E>> {
         let mut checksum = [0];
 
         self.i2c
@@ -75,7 +75,11 @@ where
     }
 
     /// Prepares for the read or write operation
-    async fn memblock_prepare_op(&mut self, class: u8, block: u8) -> Result<(), ChipError<E>> {
+    pub(crate) async fn memblock_prepare_op(
+        &mut self,
+        class: u8,
+        block: u8,
+    ) -> Result<(), ChipError<E>> {
         self.i2c
             .write(self.addr, &[def::BLOCK_DATA_CONTROL, 0])
             .await?;
@@ -111,7 +115,7 @@ where
         &mut self,
         class: u8,
         at: u8,
-        block: MemoryBlock,
+        block: &MemoryBlock,
     ) -> Result<(), ChipError<E>> {
         self.mode_cfgupdate().await?;
         self.memblock_prepare_op(class, at).await?;
