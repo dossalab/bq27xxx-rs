@@ -2,14 +2,12 @@
 
 //! A small driver for Texas Instruments battery gauges (written for BQ27427)
 
-pub mod known_chips;
-pub mod memory;
-
+pub mod chips;
 pub mod defs;
+pub mod memory;
 
 use defs::*;
 use embedded_hal_async::{delay, i2c};
-use known_chips::ChipType;
 
 /// The error type
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -25,6 +23,14 @@ impl<E> From<E> for ChipError<E> {
     fn from(e: E) -> Self {
         Self::I2CError(e)
     }
+}
+
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ChipType {
+    BQ27421,
+    BQ27426,
+    BQ27427,
+    Unknown,
 }
 
 /// Battery chemistry type. B4200 should be suited for the most hobby-grade cells
@@ -196,12 +202,12 @@ where
         let device = self.device_type().await?;
 
         match device {
-            ChipType::BQ27427 => {
-                self.check_fix_bq27427_errata().await?;
-                Ok(device)
-            }
-            _ => Ok(device),
+            #[cfg(feature = "bq27427")]
+            ChipType::BQ27427 => self.check_fix_bq27427_errata().await?,
+            _ => {}
         }
+
+        Ok(device)
     }
 
     /// Creates the driver instance

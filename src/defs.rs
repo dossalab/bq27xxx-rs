@@ -47,6 +47,7 @@ pub mod commands {
     define_command!(FULL_CHARGE_CAPACITY_UNFILTERED, 0x2C);
     define_command!(FULL_CHARGE_CAPACITY_FILTERED, 0x2E);
     define_command!(STATE_OF_CHARGE_UNFILTERED, 0x30);
+    define_command!(BLOCK_DATA_CHECKSUM, 0x60);
 
     // Control command and it's subcommands
     const CONTROL: u8 = 0x00;

@@ -6,24 +6,46 @@
 use crate::{Bq27xx, ChipError};
 use embedded_hal_async::{delay, i2c};
 
-const MEMBLOCK_SIZE: usize = 32;
+pub trait MemoryBlock {
+    fn as_bytes(&self) -> &[u8];
+    fn as_bytes_mut(&mut self) -> &mut [u8];
+    fn get_class(&self) -> u8;
 
-/// All memory locations are divided into subclasses
-pub mod memory_subclass {
-    #![allow(dead_code)]
-    pub const SAFETY: u8 = 2;
-    pub const CHARGE_TERMINATION: u8 = 36;
-    pub const DISCHARGE: u8 = 49;
-    pub const REGISTERS: u8 = 64;
-    pub const IT_CFG: u8 = 80;
-    pub const CURRENT_THRESHOLDS: u8 = 81;
-    pub const STATE: u8 = 82;
-    pub const RA0_RAM: u8 = 89;
-    pub const CHEM_DATA: u8 = 109;
-    pub const DATA: u8 = 104;
-    pub const CC_CAL: u8 = 105;
-    pub const CURRENT: u8 = 107;
-    pub const CODES: u8 = 112;
+    fn write_u8(&mut self, at: usize, value: u8) {
+        let mem = self.as_bytes_mut();
+        mem[at] = value
+    }
+
+    fn read_u8(&self, at: usize) -> u8 {
+        let mem = self.as_bytes();
+        mem[at]
+    }
+
+    fn write_u16(&mut self, at: usize, value: u16) {
+        let mem = self.as_bytes_mut();
+
+        mem[at] = (value >> 8) as u8;
+        mem[at + 1] = value as u8;
+    }
+
+    fn read_u16(&self, at: usize) -> u16 {
+        let mem = self.as_bytes();
+        ((mem[at] as u16) << 8) | mem[at + 1] as u16
+    }
+
+    fn checksum(&self) -> u8 {
+        let mut csum: u8 = 0;
+
+        for b in self.as_bytes() {
+            csum = csum.wrapping_add(*b);
+        }
+
+        255 - csum
+    }
+
+    fn new() -> Self
+    where
+        Self: Sized;
 }
 
 /// TODO: move this to the Command enums
@@ -33,29 +55,6 @@ pub mod def {
     pub const BLOCK_DATA_START: u8 = 0x40;
     pub const BLOCK_DATA_CHECKSUM: u8 = 0x60;
     pub const BLOCK_DATA_CONTROL: u8 = 0x61;
-}
-
-pub struct MemoryBlock {
-    pub raw: [u8; MEMBLOCK_SIZE],
-}
-
-impl MemoryBlock {
-    /// Simple checksum used by the gauge
-    fn checksum(&self) -> u8 {
-        let mut csum: u8 = 0;
-
-        for b in self.raw.iter() {
-            csum = csum.wrapping_add(*b);
-        }
-
-        255 - csum
-    }
-
-    fn new() -> Self {
-        Self {
-            raw: [0; MEMBLOCK_SIZE],
-        }
-    }
 }
 
 impl<I, D, E> Bq27xx<I, D>
@@ -93,14 +92,15 @@ where
     }
 
     /// Reads the entire memory block
-    pub async fn memblock_read(&mut self, class: u8, at: u8) -> Result<MemoryBlock, ChipError<E>> {
-        self.memblock_prepare_op(class, at).await?;
+    pub async fn memblock_read<M: MemoryBlock>(&mut self) -> Result<M, ChipError<E>> {
+        let mut block = M::new();
 
-        let mut block = MemoryBlock::new();
+        self.memblock_prepare_op(block.get_class(), 0).await?;
+
         let checksum = self.read_checksum().await?;
 
         self.i2c
-            .write_read(self.addr, &[def::BLOCK_DATA_START], &mut block.raw)
+            .write_read(self.addr, &[def::BLOCK_DATA_START], block.as_bytes_mut())
             .await?;
 
         if checksum != block.checksum() {
@@ -111,16 +111,13 @@ where
     }
 
     /// Writes the entire memory block
-    pub async fn memblock_write(
-        &mut self,
-        class: u8,
-        at: u8,
-        block: &MemoryBlock,
-    ) -> Result<(), ChipError<E>> {
-        self.mode_cfgupdate().await?;
-        self.memblock_prepare_op(class, at).await?;
+    pub async fn memblock_write<M: MemoryBlock>(&mut self, block: &M) -> Result<(), ChipError<E>> {
+        let class = block.get_class();
 
-        for (i, ptr) in block.raw.iter().enumerate() {
+        self.mode_cfgupdate().await?;
+        self.memblock_prepare_op(class, 0).await?;
+
+        for (i, ptr) in block.as_bytes().iter().enumerate() {
             self.i2c
                 .write(self.addr, &[def::BLOCK_DATA_START + i as u8, *ptr])
                 .await?;
@@ -136,7 +133,7 @@ where
         self.delay.delay_ms(5).await;
 
         // Now we can read the checksum one more time to ensure that the chip got it right
-        self.memblock_prepare_op(class, at).await?;
+        self.memblock_prepare_op(class, 0).await?;
 
         let chip_checksum = self.read_checksum().await?;
         self.soft_reset().await?;
@@ -146,5 +143,17 @@ where
         } else {
             Err(ChipError::Checksum)
         }
+    }
+
+    /// Helper to modify the memory parameters in place
+    pub async fn memory_modify<M, F>(&mut self, f: F) -> Result<(), ChipError<E>>
+    where
+        M: MemoryBlock,
+        F: FnOnce(&mut M),
+    {
+        let mut memblock: M = self.memblock_read().await?;
+
+        f(&mut memblock);
+        self.memblock_write(&memblock).await
     }
 }
